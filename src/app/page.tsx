@@ -1,113 +1,230 @@
-import Image from 'next/image'
+"use client"
+import React, { useRef, useEffect, useState } from 'react';
+import { Grid } from '@mui/material';
 
 export default function Home() {
+  const canvasRef = useRef(null);
+  const [elements, setElements]: any = useState([]);
+  const [selectedElement, setSelectedElement]: any = useState(null);
+  const [rotation, setRotation] = useState(0);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [color, setColor] = useState("#000000")
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    const canvas: any = canvasRef.current;
+    const context = canvas.getContext('2d');
+    context.clearRect(0, 0, canvas.width, canvas.height);
+
+    elements?.forEach((element: any, index: number) => {
+      context.fillStyle = element.color;
+      context.save();
+      context.translate(element.x, element.y);
+      context.rotate(element.rotation);
+      if (element.image) {
+        context.drawImage(element.image, -element.width / 2, -element.height / 2, element.width, element.height);
+      } else {
+        context.fillRect(-element.width / 2, -element.height / 2, element.width, element.height);
+      }
+      context.restore();
+    });
+
+    if (selectedElement) {
+      // Draw selection handles
+      const { x, y, width, height } = selectedElement;
+      context.strokeStyle = 'orange';
+      context.lineWidth = 1;
+      context.strokeRect(x - width / 2, y - height / 2, width, height);
+
+      // Draw resize handle
+      context.fillStyle = 'blue';
+      context.fillRect(x + width / 2 - 5, y + height / 2 - 5, 10, 10);
+
+      // Draw rotation handle
+      const rotationHandleX = x + width / 2;
+      const rotationHandleY = y - height / 2 - 20;
+      context.beginPath();
+      context.arc(rotationHandleX, rotationHandleY, 5, 0, Math.PI * 2);
+      context.closePath();
+      context.fillStyle = 'blue';
+      context.fill();
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [elements, selectedElement]);
+
+  const handleAddElement = () => {
+    // Add a new element to the state
+    setElements((prev: any) => [
+      ...elements ?? [],
+      {
+        x: Math.random() * 200, // Random x position
+        y: Math.random() * 200, // Random y position
+        width: 50, // Width of the shape
+        height: 50, // Height of the shape
+        color: color, // Color of the shape
+        id: (prev?.length ?? 0) + 1
+      },
+    ]);
+  };
+
+  const handleDeleteElement = () => {
+    setElements((prev: any) => {
+      if (prev.length == 0 || !selectedElement) return prev;
+      return prev.filter((x: any) => x.id !== selectedElement.id);
+    });
+  };
+
+  const getSelectedElement = (e: any) => {
+    const canvas: any = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // Find the element that was clicked
+    return elements?.find((element: any) => {
+      const { x, y, width, height, image } = element;
+      if (image) {
+        return mouseX > x - width && mouseX < x + width && mouseY > y - height && mouseY < y + height;
+      }
+      return mouseX > x - width / 2 && mouseX < x + width / 2 && mouseY > y - height / 2 && mouseY < y + height / 2;
+    });
+  }
+
+  const handleRotation = (e: any) => {
+    const value = +e.target.value;
+    setRotation(value);
+    setElements((prev: any) => {
+      const selected = prev?.find((x: any) => x.id == selectedElement.id);
+      if (!selected) return;
+      selected.rotation = value;
+      return [...prev];
+    })
+  }
+
+  const handleResize = (e: any) => {
+    const prop = e.target.name;
+    const value = +e.target.value;
+    setSize((prev: any) => {
+      prev[prop] = value;
+      return { ...prev }
+    });
+    setElements((prev: any) => {
+      const selected = prev?.find((x: any) => x.id == selectedElement.id);
+      if (!selected) return;
+      selected[prop] = value;
+      return [...prev];
+    })
+  }
+
+  const handleMouseDown = (e: any) => {
+    setSelectedElement(getSelectedElement(e))
+  };
+
+  const handleKeyDown = (e: any) => {
+    const { key } = e;
+    const moveAmount = 1;
+
+    setElements((prev: any) => {
+      const selected = prev?.find((x: any) => x.id == selectedElement?.id);
+      if (!selected) return prev;
+      switch (key) {
+        case 'ArrowUp':
+          selected.y -= moveAmount;
+          break;
+        case 'ArrowDown':
+          selected.y += moveAmount;
+          break;
+        case 'ArrowLeft':
+          selected.x -= moveAmount;
+          break;
+        case 'ArrowRight':
+          selected.x += moveAmount;
+          break;
+        default:
+          break;
+      }
+      return [...prev];
+    })
+  }
+
+  const handleClear = (e: any) => {
+    setElements([]);
+  }
+
+  const handleColor = (e: any) => {
+    setColor(e.target.value);
+    if (!selectedElement) return;
+    setElements((prev: any) => {
+      const selected = prev.find((x: any) => x.id === selectedElement?.id);
+      if (!selected) return prev;
+      selected.color = color;
+      return [...prev];
+    })
+  }
+
+  const handleImageUpload = (event: any) => {
+    const image: any = new Image();
+
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+
+      reader.onload = (e: any) => {
+        image.onload = () => {
+          setElements((prev: any) => [
+            ...elements ?? [],
+            {
+              x: 200, // Random x position
+              y: 200, // Random y position
+              width: 50, // Width of the shape
+              height: 50, // Height of the shape
+              color: color, // Color of the shape
+              id: (prev?.length ?? 0) + 1,
+              image: image
+            },
+          ]);
+        };
+        // Set the image source to the uploaded image data
+        image.src = e.target.result;
+      };
+
+      reader.readAsDataURL(file);
+    }
+  };
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">src/app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:h-auto lg:w-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{' '}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
-        </div>
-      </div>
-
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 before:lg:h-[360px] z-[-1]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
+    <Grid container spacing={2}>
+      <Grid item xs={4}>
+        <canvas
+          ref={canvasRef}
+          width={500} // Set the desired width of the canvas
+          height={500} // Set the desired height of the canvas
+          style={{ border: '1px solid black' }}
+          onMouseDown={handleMouseDown}
         />
-      </div>
+        Add Image: <input type='file' accept='image/*' onChange={handleImageUpload} /><br />
+        <button onClick={handleAddElement}>Add Element</button><br />
+        <button onClick={handleDeleteElement}>delete Element</button><br />
+        <button onClick={handleClear}>Clear</button><br />
+        Color: <input type="color" style={{ border: "solid black 1px" }} value={selectedElement?.color ?? "#000000"} onChange={handleColor} /> <br />
+        Rotation: <input type="number" style={{ border: "solid black 1px" }} step=".1" value={selectedElement?.rotation ?? 0} onChange={handleRotation} /> <br />
+        Width: <input type="number" name="width" style={{ border: "solid black 1px" }} value={selectedElement?.width ?? 0} onChange={handleResize} /> <br />
+        Hight: <input type="number" name="height" style={{ border: "solid black 1px" }} value={selectedElement?.height ?? 0} onChange={handleResize} /> <br />
+      </Grid>
 
-      <div className="mb-32 grid text-center lg:max-w-5xl lg:w-full lg:mb-0 lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Docs{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
+      <Grid item xs={4}>
+        <div style={{ backgroundColor: 'lightgreen', height: '100px' }}>
+          Column 2
+        </div>
+      </Grid>
 
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Learn{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Templates{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Explore the Next.js 13 playground.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Deploy{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
+      <Grid item xs={4}>
+        <div style={{ backgroundColor: 'lightcoral', height: '100px' }}>
+          Column 3
+        </div>
+      </Grid>
+    </Grid>
   )
 }
