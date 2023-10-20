@@ -9,62 +9,93 @@ export default function Home() {
   const [rotation, setRotation] = useState(0);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [color, setColor] = useState("#000000")
+  const [design, setDesign] = useState("/t-shirt.png");
+  const [designImage, setDesignImage]: any = useState(null);
 
   useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    const canvas: any = canvasRef.current;
-    const context = canvas.getContext('2d');
-    context.clearRect(0, 0, canvas.width, canvas.height);
-
-    elements?.forEach((element: any, index: number) => {
-      context.fillStyle = element.color;
-      context.save();
-      context.translate(element.x, element.y);
-      context.rotate(element.rotation);
-      if (element.image) {
-        context.drawImage(element.image, -element.width / 2, -element.height / 2, element.width, element.height);
-      } else {
-        context.fillRect(-element.width / 2, -element.height / 2, element.width, element.height);
+    (async () => {
+      const canvas: any = canvasRef.current;
+      const context = canvas.getContext('2d');
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      let element = {
+        width: canvas.width - 20,
+        height: canvas.height - 20,
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        image: design,
       }
-      context.restore();
-    });
+      const image = await loadImage(element);
+      context.drawImage(image, 10, 10, element.width, element.height);
+      setDesignImage({ ...element, image });
+    })()
+  }, [design]);
 
-    if (selectedElement) {
-      // Draw selection handles
-      const { x, y, width, height } = selectedElement;
-      context.strokeStyle = 'orange';
-      context.lineWidth = 1;
-      context.strokeRect(x - width / 2, y - height / 2, width, height);
+  useEffect(() => {
+    (async () => {
+      window.addEventListener('keydown', handleKeyDown);
+      const canvas: any = canvasRef.current;
+      const context = canvas.getContext('2d');
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(designImage?.image ?? new Image(), 10, 10, designImage?.width ?? 0, designImage?.height ?? 0);
+      for (const element of elements) {
+        context.fillStyle = element.color;
+        context.save();
+        context.translate(element.x, element.y);
+        context.rotate(element.rotation);
+        if (element.image) {
+          context.drawImage(element.image, -element.width / 2, -element.height / 2, element.width, element.height);
+        } else {
+          context.fillRect(-element.width / 2, -element.height / 2, element.width, element.height);
+        }
+        context.restore();
+      }
 
-      // Draw resize handle
-      context.fillStyle = 'blue';
-      context.fillRect(x + width / 2 - 5, y + height / 2 - 5, 10, 10);
+      if (selectedElement) {
+        // Draw selection handles
+        const { x, y, width, height } = selectedElement;
+        context.strokeStyle = 'orange';
+        context.lineWidth = 1;
+        context.strokeRect(x - width / 2, y - height / 2, width, height);
 
-      // Draw rotation handle
-      const rotationHandleX = x + width / 2;
-      const rotationHandleY = y - height / 2 - 20;
-      context.beginPath();
-      context.arc(rotationHandleX, rotationHandleY, 5, 0, Math.PI * 2);
-      context.closePath();
-      context.fillStyle = 'blue';
-      context.fill();
-    }
+        // Draw resize handle
+        context.fillStyle = 'blue';
+        context.fillRect(x + width / 2 - 5, y + height / 2 - 5, 10, 10);
+
+        // Draw rotation handle
+        const rotationHandleX = x + width / 2;
+        const rotationHandleY = y - height / 2 - 20;
+        context.beginPath();
+        context.arc(rotationHandleX, rotationHandleY, 5, 0, Math.PI * 2);
+        context.closePath();
+        context.fillStyle = 'blue';
+        context.fill();
+      }
+    })();
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     }
   }, [elements, selectedElement]);
 
+  async function loadImage(element: any) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.src = element.image
+
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('Failed to load the image.'));
+    });
+  }
+
   const handleAddElement = () => {
-    // Add a new element to the state
     setElements((prev: any) => [
       ...elements ?? [],
       {
-        x: Math.random() * 200, // Random x position
-        y: Math.random() * 200, // Random y position
-        width: 50, // Width of the shape
-        height: 50, // Height of the shape
-        color: color, // Color of the shape
-        id: (prev?.length ?? 0) + 1
+        x: Math.random() * 200,
+        y: Math.random() * 200,
+        width: 50,
+        height: 50,
+        color: color,
+        id: (prev?.length ?? 0) + 1,
       },
     ]);
   };
@@ -118,9 +149,31 @@ export default function Home() {
     })
   }
 
+  const handleClick = (e: any) => {
+    // setSelectedElement(getSelectedElement(e))
+  };
+
   const handleMouseDown = (e: any) => {
     setSelectedElement(getSelectedElement(e))
-  };
+  }
+
+  const handleMouseMove = (e: any) => {
+    const canvas: any = canvasRef.current;
+    const mouseX = e.clientX - canvas.getBoundingClientRect().left;
+    const mouseY = e.clientY - canvas.getBoundingClientRect().top;
+
+    setElements((prev: any) => {
+      if (prev.length == 0 || !selectedElement) return prev;
+      const dragged = prev.find((x: any) => x.id === selectedElement.id);
+      console.log(dragged)
+      const notSelected = prev.filter((x: any) => x.id !== selectedElement.id);
+      console.log(notSelected)
+      if (!dragged) return prev;
+      dragged.x = mouseX - dragged.x;
+      dragged.y = mouseY - dragged.y;
+      return [...notSelected, dragged];
+    });
+  }
 
   const handleKeyDown = (e: any) => {
     const { key } = e;
@@ -194,6 +247,11 @@ export default function Home() {
     }
   };
 
+  function handleChangeDesign() {
+    setDesign("/t-shirt2.png")
+    setElements((prev: any) => ([...prev]));
+  }
+
   return (
     <Grid container spacing={2}>
       <Grid item xs={4}>
@@ -202,11 +260,14 @@ export default function Home() {
           width={500} // Set the desired width of the canvas
           height={500} // Set the desired height of the canvas
           style={{ border: '1px solid black' }}
+          onClick={handleClick}
           onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
         />
         Add Image: <input type='file' accept='image/*' onChange={handleImageUpload} /><br />
+        <button onClick={handleChangeDesign}>Change Design</button><br />
         <button onClick={handleAddElement}>Add Element</button><br />
-        <button onClick={handleDeleteElement}>delete Element</button><br />
+        <button onClick={handleDeleteElement}>Delete Element</button><br />
         <button onClick={handleClear}>Clear</button><br />
         Color: <input type="color" style={{ border: "solid black 1px" }} value={selectedElement?.color ?? "#000000"} onChange={handleColor} /> <br />
         Rotation: <input type="number" style={{ border: "solid black 1px" }} step=".1" value={selectedElement?.rotation ?? 0} onChange={handleRotation} /> <br />
