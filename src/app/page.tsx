@@ -5,12 +5,12 @@ import { Grid } from '@mui/material';
 export default function Home() {
   const canvasRef = useRef(null);
   const [elements, setElements]: any = useState([]);
-  const [selectedElement, setSelectedElement]: any = useState(null);
   const [rotation, setRotation] = useState(0);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [color, setColor] = useState("#000000")
   const [design, setDesign] = useState("/t-shirt.png");
   const [designImage, setDesignImage]: any = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -31,28 +31,26 @@ export default function Home() {
   }, [design]);
 
   useEffect(() => {
-    (async () => {
-      window.addEventListener('keydown', handleKeyDown);
-      const canvas: any = canvasRef.current;
-      const context = canvas.getContext('2d');
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(designImage?.image ?? new Image(), 10, 10, designImage?.width ?? 0, designImage?.height ?? 0);
-      for (const element of elements) {
-        context.fillStyle = element.color;
-        context.save();
-        context.translate(element.x, element.y);
-        context.rotate(element.rotation);
-        if (element.image) {
-          context.drawImage(element.image, -element.width / 2, -element.height / 2, element.width, element.height);
-        } else {
-          context.fillRect(-element.width / 2, -element.height / 2, element.width, element.height);
-        }
-        context.restore();
+    window.addEventListener('keydown', handleKeyDown);
+    const canvas: any = canvasRef.current;
+    const context = canvas.getContext('2d');
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(designImage?.image ?? new Image(), 10, 10, designImage?.width ?? 0, designImage?.height ?? 0);
+    for (const element of elements) {
+      context.fillStyle = element.color;
+      context.save();
+      context.translate(element.x, element.y);
+      context.rotate(element.rotation);
+      if (element.image) {
+        context.drawImage(element.image, -element.width / 2, -element.height / 2, element.width, element.height);
+      } else {
+        context.fillRect(-element.width / 2, -element.height / 2, element.width, element.height);
       }
+      context.restore();
 
-      if (selectedElement) {
+      if (element.isSelected) {
         // Draw selection handles
-        const { x, y, width, height } = selectedElement;
+        const { x, y, width, height } = element;
         context.strokeStyle = 'orange';
         context.lineWidth = 1;
         context.strokeRect(x - width / 2, y - height / 2, width, height);
@@ -70,11 +68,12 @@ export default function Home() {
         context.fillStyle = 'blue';
         context.fill();
       }
-    })();
+    }
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     }
-  }, [elements, selectedElement]);
+  }, [elements]);
 
   async function loadImage(element: any) {
     return new Promise((resolve, reject) => {
@@ -96,14 +95,15 @@ export default function Home() {
         height: 50,
         color: color,
         id: (prev?.length ?? 0) + 1,
+        isSelected: false
       },
     ]);
   };
 
   const handleDeleteElement = () => {
     setElements((prev: any) => {
-      if (prev.length == 0 || !selectedElement) return prev;
-      return prev.filter((x: any) => x.id !== selectedElement.id);
+      if (prev.length == 0) return prev;
+      return prev.filter((x: any) => !x.isSelected);
     });
   };
 
@@ -127,7 +127,7 @@ export default function Home() {
     const value = +e.target.value;
     setRotation(value);
     setElements((prev: any) => {
-      const selected = prev?.find((x: any) => x.id == selectedElement.id);
+      const selected = prev?.find((x: any) => x.isSelected);
       if (!selected) return;
       selected.rotation = value;
       return [...prev];
@@ -142,7 +142,7 @@ export default function Home() {
       return { ...prev }
     });
     setElements((prev: any) => {
-      const selected = prev?.find((x: any) => x.id == selectedElement.id);
+      const selected = prev?.find((x: any) => x.isSelected);
       if (!selected) return;
       selected[prop] = value;
       return [...prev];
@@ -150,11 +150,27 @@ export default function Home() {
   }
 
   const handleClick = (e: any) => {
-    // setSelectedElement(getSelectedElement(e))
+    setElements((prev: any) => {
+      const elementsWithoutSelection = elements.map((x: any) => {
+        x.isSelected = false;
+        return x;
+      });
+      const selected = getSelectedElement(e);
+      if (!selected) {
+        return elementsWithoutSelection;
+      } else {
+        selected.isSelected = true;
+        return [...elementsWithoutSelection, selected];
+      }
+    })
   };
 
   const handleMouseDown = (e: any) => {
-    setSelectedElement(getSelectedElement(e))
+    setIsDragging(true);
+  }
+
+  const handleMouseUp = (e: any) => {
+    setIsDragging(false);
   }
 
   const handleMouseMove = (e: any) => {
@@ -162,17 +178,17 @@ export default function Home() {
     const mouseX = e.clientX - canvas.getBoundingClientRect().left;
     const mouseY = e.clientY - canvas.getBoundingClientRect().top;
 
-    setElements((prev: any) => {
-      if (prev.length == 0 || !selectedElement) return prev;
-      const dragged = prev.find((x: any) => x.id === selectedElement.id);
-      console.log(dragged)
-      const notSelected = prev.filter((x: any) => x.id !== selectedElement.id);
-      console.log(notSelected)
-      if (!dragged) return prev;
-      dragged.x = mouseX - dragged.x;
-      dragged.y = mouseY - dragged.y;
-      return [...notSelected, dragged];
-    });
+    if (isDragging) {
+      setElements((prev: any) => {
+        if (prev.length == 0) return prev;
+        const dragged = { ...prev.find((x: any) => x.isSelected) };
+        const notSelected = prev.filter((x: any) => !x.isSelected);
+        if (!dragged) return prev;
+        dragged.x = mouseX;
+        dragged.y = mouseY;
+        return [...notSelected, dragged];
+      });
+    }
   }
 
   const handleKeyDown = (e: any) => {
@@ -180,7 +196,7 @@ export default function Home() {
     const moveAmount = 1;
 
     setElements((prev: any) => {
-      const selected = prev?.find((x: any) => x.id == selectedElement?.id);
+      const selected = prev?.find((x: any) => x.isSelected);
       if (!selected) return prev;
       switch (key) {
         case 'ArrowUp':
@@ -208,9 +224,8 @@ export default function Home() {
 
   const handleColor = (e: any) => {
     setColor(e.target.value);
-    if (!selectedElement) return;
     setElements((prev: any) => {
-      const selected = prev.find((x: any) => x.id === selectedElement?.id);
+      const selected = prev.find((x: any) => x.isSelected);
       if (!selected) return prev;
       selected.color = color;
       return [...prev];
@@ -262,6 +277,7 @@ export default function Home() {
           style={{ border: '1px solid black' }}
           onClick={handleClick}
           onMouseDown={handleMouseDown}
+          onMouseUp={handleMouseUp}
           onMouseMove={handleMouseMove}
         />
         Add Image: <input type='file' accept='image/*' onChange={handleImageUpload} /><br />
@@ -269,10 +285,10 @@ export default function Home() {
         <button onClick={handleAddElement}>Add Element</button><br />
         <button onClick={handleDeleteElement}>Delete Element</button><br />
         <button onClick={handleClear}>Clear</button><br />
-        Color: <input type="color" style={{ border: "solid black 1px" }} value={selectedElement?.color ?? "#000000"} onChange={handleColor} /> <br />
-        Rotation: <input type="number" style={{ border: "solid black 1px" }} step=".1" value={selectedElement?.rotation ?? 0} onChange={handleRotation} /> <br />
-        Width: <input type="number" name="width" style={{ border: "solid black 1px" }} value={selectedElement?.width ?? 0} onChange={handleResize} /> <br />
-        Hight: <input type="number" name="height" style={{ border: "solid black 1px" }} value={selectedElement?.height ?? 0} onChange={handleResize} /> <br />
+        Color: <input type="color" style={{ border: "solid black 1px" }} value={elements?.find((x: any) => x.isSelected)?.color ?? "#000000"} onChange={handleColor} /> <br />
+        Rotation: <input type="number" style={{ border: "solid black 1px" }} step=".1" value={elements?.find((x: any) => x.isSelected)?.rotation ?? 0} onChange={handleRotation} /> <br />
+        Width: <input type="number" name="width" style={{ border: "solid black 1px" }} value={elements?.find((x: any) => x.isSelected)?.width ?? 0} onChange={handleResize} /> <br />
+        Hight: <input type="number" name="height" style={{ border: "solid black 1px" }} value={elements?.find((x: any) => x.isSelected)?.height ?? 0} onChange={handleResize} /> <br />
       </Grid>
 
       <Grid item xs={4}>
